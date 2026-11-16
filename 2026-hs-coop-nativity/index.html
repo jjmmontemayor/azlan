@@ -82,6 +82,11 @@ footer{border-top:1px solid var(--line);background:var(--surface)}
 .ctl .pos{margin-inline:auto;color:var(--muted);font-size:.9rem;font-variant-numeric:tabular-nums;text-align:center}
 button[aria-pressed="true"]{background:var(--btn);color:var(--btn-fg);border-color:var(--btn);font-weight:700}
 input[type=range]{width:6.5em;accent-color:var(--star)}
+.mbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding-block:0 10px}
+.mbar .mlab{font-family:var(--display);font-weight:800;color:var(--star)}
+.mbar .go{background:var(--btn);color:var(--btn-fg);border-color:var(--btn);font-weight:700;min-width:6.5em}
+.mbar select{max-width:16em}
+input[type=checkbox]{accent-color:var(--star);width:1.1em;height:1.1em}
 .mus{font-size:.85em;color:var(--star);font-weight:700;padding:8px 12px 0;letter-spacing:.02em}
 .ctl .pos .np{display:block;color:var(--star);font-weight:700}
 @media (prefers-reduced-motion:no-preference){.ln{transition:background .15s}}
@@ -94,9 +99,19 @@ input[type=range]{width:6.5em;accent-color:var(--star)}
     <div class="wrap bar">
       <div class="brand"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="var(--star)" d="M12 1l2.6 7.4L22 11l-7.4 2.6L12 23l-2.6-9.4L2 11l7.4-2.6z"/></svg>The Nativity of Jesus 2026</div>
       <label class="pick" for="student">Highlight lines for <select id="student"></select></label>
-      <button id="music" aria-pressed="false">♪ Music: off</button><label class="pick" for="vol">Volume <input type="range" id="vol" min="0" max="100" value="45"></label><button id="narr" aria-pressed="false">Read aloud: off</button>
+      <button id="narr" aria-pressed="false">Read aloud: off</button>
       <button id="smaller" aria-label="Smaller text">A−</button><button id="bigger" aria-label="Bigger text">A+</button>
       <button id="full">Full screen</button>
+    </div>
+    <div class="wrap mbar" role="group" aria-label="Music controls">
+      <span class="mlab">♪ Music</span>
+      <button id="mplay" class="go">▶ Play</button>
+      <select id="mtrack" aria-label="Music track"></select>
+      <button id="mrestart">⏮ From start</button>
+      <button id="mfade">Fade out</button>
+      <label class="pick" for="vol">Volume <input type="range" id="vol" min="0" max="100" value="45"></label>
+      <label class="pick" for="mfollow"><input type="checkbox" id="mfollow" checked> Change with the script</label>
+      <label class="pick" for="mloop"><input type="checkbox" id="mloop" checked> Repeat</label>
     </div>
     <nav class="wrap scenes" id="nav" aria-label="Scenes"></nav>
   </header>
@@ -132,11 +147,12 @@ function next(){const s=slides[si];if(s.t==='scene'&&li<s.s.cues.length-1){li++;
 function prev(){const s=slides[si];if(s.t==='scene'&&li>0){li--;render();}else if(si>0){const p=slides[si-1];go(si-1,p.t==='scene'?p.s.cues.length-1:0);}}
 function render(){
   const s=slides[si],pg=$('page');let h='';
+  if(follow){const a=trackAt();if(a!==lastAuto){lastAuto=a;want=a;}}
   if(s.t==='title'){
     h=`<div class="title"><svg width="84" height="84" viewBox="0 0 24 24" aria-hidden="true"><path fill="var(--star)" d="M12 1l2.6 7.4L22 11l-7.4 2.6L12 23l-2.6-9.4L2 11l7.4-2.6z"/></svg>
     <div class="eyebrow">A play in ${SCENES.length} scenes</div><h1>The Nativity of Jesus</h1>
     <p>From the angel’s visit in Nazareth to the Christmas celebration. 17 speaking parts and a choir.</p>
-    <div class="how"><span><kbd>Space</kbd> or <kbd>↓</kbd> next line</span><span><kbd>↑</kbd> previous line</span><span><kbd>→</kbd> <kbd>←</kbd> change scene</span><span>Turn on <strong>♪ Music</strong> for background music that follows the script</span><span>Pick a student at the top to highlight their lines</span></div></div>`;
+    <div class="how"><span><kbd>Space</kbd> or <kbd>↓</kbd> next line</span><span><kbd>↑</kbd> previous line</span><span><kbd>→</kbd> <kbd>←</kbd> change scene</span><span>Press <strong>▶ Play</strong> in the music bar, or <kbd>M</kbd>, to start or pause the music</span><span>Pick a student at the top to highlight their lines</span></div></div>`;
   }else if(s.t==='cast'){
     h=`<div class="eyebrow">Who plays whom</div><h2>Characters</h2><p class="setting">Tap a name to highlight that student’s lines in every scene.</p><div class="cast">`+
       CAST.map(c=>`<button data-k="${esc(c[1])}" aria-pressed="${student===c[1]}"><span class="role">${esc(c[0])}</span><span class="nm">${esc(c[1])}</span><span class="ct">${count(c[1])} speaking turns</span></button>`).join('')+
@@ -156,21 +172,34 @@ function render(){
   
   const last=s.t==='scene'&&li===s.s.cues.length-1;
   $('next').disabled=si===slides.length-1&&(s.t!=='scene'||last);$('next').textContent=si===slides.length-1&&last?'The end':s.t!=='scene'?(si===slides.length-1?'The end':'Next ▶'):(last?(si+1<slides.length&&slides[si+1].t==='scene'?'Next scene ▶':'Finish ▶'):'Next line ▶');
-  if(s.t==='scene'){const c=s.s.cues[li];$('pos').innerHTML=`Line ${li+1} of ${s.s.cues.length} · now speaking: <strong>${esc(c.name)}</strong>`+(musicOn&&trackAt()?`<span class="np">♪ ${esc(TR[trackAt()])}</span>`:'');
+  if(s.t==='scene'){const c=s.s.cues[li];$('pos').innerHTML=`Line ${li+1} of ${s.s.cues.length} · now speaking: <strong>${esc(c.name)}</strong>`+(musicOn&&want?`<span class="np">♪ ${esc(TR[want])}</span>`:'');
     const el=pg.querySelector('.cur');if(el)el.scrollIntoView({block:'center',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});}
   else{$('pos').textContent=s.label;$('main').scrollTop=0;}
-  setMusic(trackAt());speak();
+  if(musicOn)load(want);mui();speak();
 }
 $('page').onclick=e=>{const l=e.target.closest('.ln');if(l){li=+l.dataset.l;render();return;}
   const k=e.target.closest('.cast button[data-k]');if(k){student=student===k.dataset.k?'':k.dataset.k;sel.value=student;render();}};
-// ---- music: one player, fade out, swap track, fade in
-let musicOn=false,vol=.45,curTrack=0,mtok=0;const au=new Audio();au.loop=true;
+// ---- music: the teacher controls it; tracks repeat until changed, so any reading pace works
+let musicOn=false,follow=true,want=0,lastAuto=-1,vol=.45,curTrack=0,mtok=0;const au=new Audio();au.loop=true;
+$('mtrack').innerHTML='<option value="0">No music</option>'+Object.keys(TR).map(k=>`<option value="${k}">${esc(TR[k])}</option>`).join('');
 function trackAt(){const s=slides[si];if(s.t!=='scene')return 0;let m=0;for(let i=0;i<=li;i++)if(s.s.cues[i].m!==undefined)m=s.s.cues[i].m;return m;}
 function fade(to,ms,done){clearInterval(au._f);let from=au.volume;const t0=Date.now();au._f=setInterval(()=>{const k=Math.min(1,(Date.now()-t0)/ms);try{au.volume=from+(to-from)*k;}catch(e){}if(k>=1){clearInterval(au._f);if(done)done();}},40);}
-function setMusic(id){if(!musicOn)id=0;if(id===curTrack)return;curTrack=id;const my=++mtok;
-  const start=()=>{if(my!==mtok)return;if(!id){au.pause();return;}au.src=(window.MUSIC&&window.MUSIC[id])||('music/t'+id+'.mp3');try{au.volume=0;}catch(e){}const p=au.play();if(p&&p.catch)p.catch(()=>{});fade(vol,900);};
-  if(!au.paused&&au.src)fade(0,600,start);else start();}
-$('music').onclick=()=>{musicOn=!musicOn;$('music').setAttribute('aria-pressed',musicOn);$('music').textContent='♪ Music: '+(musicOn?'on':'off');render();};
+function playEl(){const p=au.play();if(p&&p.catch)p.catch(()=>{});}
+function load(id,ms){if(id===curTrack)return;curTrack=id;const my=++mtok;
+  const start=()=>{if(my!==mtok)return;if(!id){au.pause();return;}au.src=(window.MUSIC&&window.MUSIC[id])||('music/t'+id+'.mp3');try{au.volume=0;}catch(e){}playEl();fade(vol,900);};
+  if(!au.paused&&au.src)fade(0,ms||600,start);else start();}
+function mui(){$('mtrack').value=want;$('mplay').textContent=musicOn?'⏸ Pause':'▶ Play';$('mplay').setAttribute('aria-pressed',musicOn);}
+function toggleMusic(){musicOn=!musicOn;
+  if(!musicOn){mtok++;clearInterval(au._f);au.pause();}
+  else if(want&&want===curTrack&&au.src){try{au.volume=vol;}catch(e){}playEl();}
+  else{curTrack=-1;load(want);}
+  render();}
+$('mplay').onclick=toggleMusic;
+$('mtrack').onchange=()=>{want=+$('mtrack').value;musicOn=true;load(want);render();};
+$('mrestart').onclick=()=>{try{au.currentTime=0;}catch(e){}};
+$('mfade').onclick=()=>{want=0;if(musicOn)load(0,3000);render();};
+$('mfollow').onchange=()=>{follow=$('mfollow').checked;lastAuto=-1;render();};
+$('mloop').onchange=()=>{au.loop=$('mloop').checked;};
 $('vol').oninput=()=>{vol=$('vol').value/100;clearInterval(au._f);try{au.volume=vol;}catch(e){}};
 // ---- read aloud with the device's own voice
 let narr=false,stok=0;const canSpeak='speechSynthesis' in window&&typeof SpeechSynthesisUtterance!=='undefined';
@@ -185,7 +214,8 @@ function zoom(d){scale=Math.max(.8,Math.min(1.8,scale+d));document.documentEleme
 $('bigger').onclick=()=>zoom(.15);$('smaller').onclick=()=>zoom(-.15);
 $('full').onclick=()=>{try{const p=document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();if(p&&p.catch)p.catch(()=>{});}catch(e){}};
 if(!document.documentElement.requestFullscreen)$('full').hidden=true;
-document.addEventListener('keydown',e=>{if(e.target.tagName==='SELECT')return;
+document.addEventListener('keydown',e=>{if(/SELECT|INPUT/.test(e.target.tagName))return;
+  if(e.key==='m'||e.key==='M'){toggleMusic();return;}
   const k=e.key;if(k===' '||k==='ArrowDown'||k==='PageDown'){e.preventDefault();next();}
   else if(k==='ArrowUp'||k==='PageUp'){e.preventDefault();prev();}
   else if(k==='ArrowRight'){e.preventDefault();go(si+1,0);}else if(k==='ArrowLeft'){e.preventDefault();go(si-1,0);}});
